@@ -34,6 +34,7 @@ button {
 button:hover { background: rgba(0, 0, 0, 0.06); }
 button.primary { background: #d5e6f8; color: #1d1d1f; border-radius: 8px; min-height: 32px; padding: 0 16px; }
 button.primary:hover { background: #c5daf3; }
+button.primary:disabled { opacity: 0.45; }
 
 .app {
   display: grid;
@@ -247,6 +248,84 @@ main {
     0 16px 32px rgba(40, 30, 20, 0.22),
     0 2px 6px rgba(40, 30, 20, 0.12);
 }
+.stage { flex: 1; min-height: 0; display: flex; }
+.conversation { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.files {
+  width: 228px;
+  flex: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid rgba(60, 60, 67, 0.12);
+  background: rgba(255, 255, 255, 0.55);
+}
+.files-title { display: flex; justify-content: space-between; padding: 10px 12px 4px; font-size: 11px; font-weight: 600; color: rgba(60, 60, 67, 0.6); }
+.changes { max-height: 34%; overflow: auto; padding-bottom: 4px; }
+.changes p { margin: 4px 12px 8px; font-size: 12px; color: rgba(60, 60, 67, 0.55); }
+.change-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  width: calc(100% - 8px);
+  margin: 0 4px;
+  min-height: 28px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: transparent;
+  text-align: left;
+  color: #1d1d1f;
+}
+.change-row span, .change-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.change-row small { grid-column: 2; font-size: 11px; color: rgba(60, 60, 67, 0.55); }
+.change-row:hover { background: rgba(0, 0, 0, 0.05); }
+.file-row em, .change-row em { font-style: normal; font-size: 11px; font-weight: 650; }
+.git.modified { color: #c47d00; }
+.git.added, .git.untracked { color: #248a3d; }
+.git.deleted { color: #ff3b30; }
+.git.renamed { color: #007aff; }
+.git.conflict { color: #ff3b30; }
+.file-row em { margin-left: auto; }
+.files-scroll { flex: 1; min-height: 0; overflow: auto; padding-bottom: 8px; }
+.file-row {
+  display: flex;
+  width: calc(100% - 8px);
+  margin: 0 4px;
+  gap: 4px;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 5px;
+  font-size: 12px;
+  text-align: left;
+  background: transparent;
+  color: #1d1d1f;
+}
+.file-row i { width: 10px; flex: none; font-style: normal; color: rgba(60, 60, 67, 0.55); }
+.file-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-row:hover { background: rgba(0, 0, 0, 0.05); }
+.file-row.selected { background: #d6e6fb; }
+.file-error { margin: 8px 12px; font-size: 12px; color: var(--danger); }
+.viewer { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.viewer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid rgba(60, 60, 67, 0.12);
+}
+.viewer-bar b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; }
+.viewer textarea, .viewer pre {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 16px 20px;
+  font-family: "SF Mono", ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  box-shadow: none;
+}
+.viewer textarea { outline: none; resize: none; border-radius: 0; background: transparent; }
+.viewer p { padding: 16px 20px; color: var(--secondary); }
 .banner, .status-line, .widget { flex: none; }
 .banner { margin: 8px 28px 0; color: var(--danger); font-size: 13px; }
 .status-line, small, .empty, .welcome p, .sheet p, .widget { color: var(--secondary); }
@@ -425,7 +504,8 @@ button.send.stop:hover { background: #636366; }
 }
 .sheet {
   width: min(480px, calc(100% - 32px));
-  background: rgba(255, 255, 255, 0.96);
+  color: #1d1d1f;
+  background: rgba(255, 255, 255, 0.98);
   backdrop-filter: blur(30px);
   border-radius: 12px;
   padding: 16px;
@@ -435,7 +515,11 @@ button.send.stop:hover { background: #636366; }
 }
 .sheet.narrow { width: min(420px, calc(100% - 32px)); }
 .sheet.wide { width: min(640px, calc(100% - 32px)); }
-.sheet h2 { margin: 0 0 12px; font-size: 13px; font-weight: 600; text-align: center; }
+.sheet h2, .sheet b, .provider-card > b { margin: 0 0 12px; font-size: 13px; font-weight: 600; text-align: center; color: #1d1d1f; }
+.provider-card > b { margin: 0; text-align: left; font-size: 15px; }
+.sheet button { color: #1d1d1f; background: rgba(0, 0, 0, 0.06); }
+.sheet button.primary { background: #d5e6f8; }
+.sheet .menu button { background: transparent; }
 .sheet p { font-size: 13px; line-height: 1.45; }
 .menu { display: flex; flex-direction: column; gap: 1px; }
 .menu button {

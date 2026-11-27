@@ -2,6 +2,8 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, screen, shell } from "e
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Host } from "./host.js";
+import { listFiles, readWorkspaceFile, workspaceFilePath, writeWorkspaceFile } from "./files.js";
+import { gitChanges } from "./git.js";
 import { deleteProvider, importModels, maskProviders, saveProvider, testProvider } from "./models.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -99,6 +101,11 @@ function registerIpc() {
     return host.open(result.filePaths[0]);
   });
   ipcMain.handle("workspace:close", (_event, id) => host.close(id));
+  ipcMain.handle("workspace:files", (_event, { id, dir }) => listFiles(host.cwdOf(id), dir || ""));
+  ipcMain.handle("workspace:git", (_event, id) => gitChanges(host.cwdOf(id)));
+  ipcMain.handle("workspace:readFile", (_event, { id, file }) => readWorkspaceFile(host.cwdOf(id), file));
+  ipcMain.handle("workspace:writeFile", (_event, { id, file, text }) => writeWorkspaceFile(host.cwdOf(id), file, text));
+  ipcMain.handle("workspace:openExternal", (_event, { id, file }) => shell.openPath(workspaceFilePath(host.cwdOf(id), file)));
   ipcMain.handle("workspace:setModel", (_event, { id, provider, modelId }) => host.setModel(id, provider, modelId));
   ipcMain.handle("workspace:setThinking", (_event, { id, level }) => host.setThinking(id, level));
   ipcMain.handle("workspace:thinkingLevels", (_event, id) => host.thinkingLevels(id));

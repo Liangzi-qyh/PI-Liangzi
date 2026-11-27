@@ -326,6 +326,12 @@ export class Host {
     return this.must(workspaceId).client.replyUi(requestId, body);
   }
 
+  cwdOf(id) {
+    const workspace = this.workspaces.get(id);
+    if (!workspace) throw new Error("没有这个工作区");
+    return workspace.cwd;
+  }
+
   async close(id) {
     const workspace = this.workspaces.get(id);
     if (!workspace) return false;

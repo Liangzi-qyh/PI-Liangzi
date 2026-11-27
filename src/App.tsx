@@ -40,6 +40,74 @@ const featuredCommands = ["new", "resume", "model", "thinking", "compact", "copy
 
 const starters = ["说明这个项目", "找出可能的错误", "列出接下来可以做的事"];
 
+type FileEntry = { name: string; path: string; directory: boolean };
+type GitChange = { path: string; code: string; kind: string };
+
+const gitMark: Record<string, string> = {
+  modified: "M",
+  added: "A",
+  untracked: "U",
+  deleted: "D",
+  renamed: "R",
+  conflict: "!",
+};
+
+const gitText: Record<string, string> = {
+  modified: "已修改",
+  added: "新文件",
+  untracked: "未跟踪",
+  deleted: "已删除",
+  renamed: "重命名",
+  conflict: "冲突",
+};
+
+function FileTree({
+  workspaceId,
+  dir,
+  depth,
+  listings,
+  openDirs,
+  selected,
+  marks,
+  onToggle,
+  onOpen,
+}: {
+  workspaceId: string;
+  dir: string;
+  depth: number;
+  listings: Record<string, FileEntry[]>;
+  openDirs: Record<string, boolean>;
+  selected: string;
+  marks: Record<string, string>;
+  onToggle: (path: string) => void;
+  onOpen: (path: string) => void;
+}) {
+  const entries = listings[`${workspaceId}::${dir}`] || [];
+  return (
+    <>
+      {entries.map((entry) => {
+        const opened = Boolean(openDirs[`${workspaceId}::${entry.path}`]);
+        return (
+          <div key={entry.path}>
+            <button
+              className={selected === entry.path ? "file-row selected" : "file-row"}
+              style={{ paddingLeft: 8 + depth * 14 }}
+              onClick={() => (entry.directory ? onToggle(entry.path) : onOpen(entry.path))}
+            >
+              <i>{entry.directory ? (opened ? "▾" : "▸") : ""}</i>
+              <span>{entry.name}</span>
+              {marks[entry.path] ? <em className={`git ${marks[entry.path]}`}>{gitMark[marks[entry.path]]}</em> : null}
+            </button>
+            {entry.directory && opened ? (
+              <FileTree workspaceId={workspaceId} dir={entry.path} depth={depth + 1} listings={listings} openDirs={openDirs} selected={selected} marks={marks} onToggle={onToggle} onOpen={onOpen} />
+            ) : null}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 const emptyModel = () => ({ id: "", name: "", contextWindow: 128000, maxTokens: 8192, reasoning: false, image: false });
 
 function modelValue(model: ModelChoice): string {
@@ -64,6 +132,13 @@ export function App() {
   const [hotkeys, setHotkeys] = useState(false);
   const [menu, setMenu] = useState("");
   const [maximized, setMaximized] = useState(false);
+  const [listings, setListings] = useState<Record<string, FileEntry[]>>({});
+  const [openDirs, setOpenDirs] = useState<Record<string, boolean>>({});
+  const [fileView, setFileView] = useState<{ id: string; path: string; text: string; saved: string; binary: boolean; truncated: boolean } | null>(null);
+  const fileViewRef = useRef(fileView);
+  fileViewRef.current = fileView;
+  const [fileError, setFileError] = useState("");
+  const [gitState, setGitState] = useState<{ id: string; repo: boolean; changes: GitChange[] }>({ id: "", repo: false, changes: [] });
   const [pending, setPending] = useState<BuiltinCommand | null>(null);
   const [pendingText, setPendingText] = useState("");
   const [pendingSecret, setPendingSecret] = useState("");
@@ -124,6 +199,25 @@ export function App() {
   useEffect(() => window.pi.onWindowState(({ maximized: next }) => setMaximized(next)), []);
 
   useEffect(() => {
+    if (!activeId) return;
+    let cancelled = false;
+    window.pi.listFiles(activeId, "").then((entries) => {
+      if (cancelled) return;
+      setListings((current) => ({ ...current, [`${activeId}::`]: entries }));
+    }).catch((error) => {
+      if (!cancelled) setFileError(error instanceof Error ? error.message : String(error));
+    });
+    return () => { cancelled = true; };
+  }, [activeId]);
+
+  useEffect(() => {
+    if (!activeId) return;
+    void refreshGit(activeId);
+    const timer = setInterval(() => { void refreshGit(activeId); }, 3000);
+    return () => clearInterval(timer);
+  }, [activeId]);
+
+  useEffect(() => {
     document.body.classList.toggle("maximized", maximized);
     return () => document.body.classList.remove("maximized");
   }, [maximized]);
@@ -145,6 +239,9 @@ export function App() {
         setPalette(true);
         setQuery("");
         setMenu("");
+      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        void saveFile();
       } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "o") {
         event.preventDefault();
         setMenu("");
@@ -176,6 +273,67 @@ export function App() {
     const extra = dynamic.filter((command) => !featuredCommands.includes(command.name));
     return [...picked, ...extra];
   }, [commands, active, query, moreCommands]);
+
+  async function toggleDir(dirPath: string) {
+    if (!active) return;
+    const key = `${active.id}::${dirPath}`;
+    if (openDirs[key]) {
+      setOpenDirs((current) => ({ ...current, [key]: false }));
+      return;
+    }
+    setOpenDirs((current) => ({ ...current, [key]: true }));
+    if (listings[key]) return;
+    try {
+      const entries = await window.pi.listFiles(active.id, dirPath);
+      setListings((current) => ({ ...current, [key]: entries }));
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function leaveFile() {
+    const current = fileViewRef.current;
+    if (current && !current.binary && !current.truncated && current.text !== current.saved) {
+      return window.confirm("这个文件还有未保存的修改，确定离开吗？");
+    }
+    return true;
+  }
+
+  async function saveFile() {
+    const current = fileViewRef.current;
+    if (!current || current.binary || current.truncated || current.text === current.saved) return;
+    try {
+      await window.pi.writeFile(current.id, current.path, current.text);
+      setFileView((view) => view && view.id === current.id && view.path === current.path ? { ...view, saved: current.text } : view);
+      setNotice("已保存");
+      void refreshGit(current.id);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function openFile(filePath: string) {
+    if (!active) return;
+    const current = fileViewRef.current;
+    if (current && current.id === active.id && current.path === filePath) return;
+    if (!leaveFile()) return;
+    try {
+      const result = await window.pi.readFile(active.id, filePath);
+      setFileView({ id: active.id, path: filePath, text: result.text, saved: result.text, binary: result.binary, truncated: result.truncated });
+      setFileError("");
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function refreshGit(id: string) {
+    try {
+      const result = await window.pi.gitChanges(id);
+      setGitState({ id, repo: result.repo, changes: result.changes });
+    } catch {
+      setGitState({ id, repo: false, changes: [] });
+    }
+  }
 
   async function openFolder() {
     try {
@@ -328,6 +486,8 @@ export function App() {
   }
 
   const messages = active ? chats[active.id] || [] : [];
+  const changes = active && gitState.id === active.id ? gitState.changes : [];
+  const marks = Object.fromEntries(changes.map((change) => [change.path, change.kind]));
 
   function chooseMenu(action?: () => void) {
     setMenu("");
@@ -490,9 +650,25 @@ export function App() {
           ) : null}
         </header>
         {active ? (
-          <>
+          <div className="stage">
+          <div className="conversation">
             {active.error ? <div className="banner">{active.error}</div> : null}
             {active.extStatus ? <div className="status-line">{active.extStatus}</div> : null}
+            {fileView && fileView.id === active.id ? (
+              <div className="viewer">
+                <div className="viewer-bar">
+                  <b title={fileView.path}>{fileView.path}{fileView.text !== fileView.saved ? " · 未保存" : ""}</b>
+                  {fileView.binary || fileView.truncated ? null : (
+                    <button className="primary" disabled={fileView.text === fileView.saved} onClick={() => { void saveFile(); }}>保存</button>
+                  )}
+                  <button onClick={() => window.pi.openExternal(active.id, fileView.path)}>用系统打开</button>
+                  <button onClick={() => { if (leaveFile()) setFileView(null); }}>回到对话</button>
+                </div>
+                {fileView.binary ? <p>这是二进制文件，可以用系统程序打开。</p> : fileView.truncated ? <pre>{fileView.text}{"\n\n… 文件较长，这里不能直接改，请用系统程序修改。"}</pre> : (
+                  <textarea value={fileView.text} spellCheck={false} onChange={(event) => setFileView((view) => view ? { ...view, text: event.target.value } : view)} />
+                )}
+              </div>
+            ) : (
             <div className="transcript" ref={transcriptRef}>
               {messages.length === 0 ? (
                 <div className="empty">
@@ -541,6 +717,7 @@ export function App() {
                 <article className="assistant"><div className="prose"><i className="caret" /></div></article>
               ) : null}
             </div>
+            )}
             {active.widget.length ? <pre className="widget">{active.widget.join("\n")}</pre> : null}
             <div className="composer-wrap">
               <div className="composer">
@@ -569,7 +746,40 @@ export function App() {
                 </div>
               </div>
             </div>
-          </>
+          </div>
+          <aside className="files">
+            <div className="files-title"><span>更改</span><small>{gitState.id === active.id && gitState.repo ? changes.length : ""}</small></div>
+            <div className="changes">
+              {gitState.id === active.id && !gitState.repo ? <p>这个文件夹还不是 Git 仓库</p> : null}
+              {gitState.id === active.id && gitState.repo && changes.length === 0 ? <p>没有未提交的修改</p> : null}
+              {changes.map((change) => (
+                <button key={`${change.kind}-${change.path}`} className="change-row" onClick={() => {
+                  if (change.kind === "deleted") setFileError("这个文件已从工作区删除");
+                  else void openFile(change.path);
+                }}>
+                  <em className={`git ${change.kind}`}>{gitMark[change.kind] || "M"}</em>
+                  <span title={change.path}>{change.path}</span>
+                  <small>{gitText[change.kind] || "已修改"}</small>
+                </button>
+              ))}
+            </div>
+            <div className="files-title"><span>目录</span></div>
+            {fileError ? <p className="file-error">{fileError}</p> : null}
+            <div className="files-scroll">
+              <FileTree
+                workspaceId={active.id}
+                dir=""
+                depth={0}
+                listings={listings}
+                openDirs={openDirs}
+                selected={fileView?.id === active.id ? fileView.path : ""}
+                marks={marks}
+                onToggle={toggleDir}
+                onOpen={openFile}
+              />
+            </div>
+          </aside>
+          </div>
         ) : (
           <section className="welcome">
             <h1>打开一个文件夹</h1>

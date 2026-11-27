@@ -90,6 +90,11 @@ declare global {
       onWindowState: (callback: (payload: { maximized: boolean }) => void) => () => void;
       pickFolder: () => Promise<Workspace | null>;
       closeWorkspace: (id: string) => Promise<boolean>;
+      listFiles: (id: string, dir: string) => Promise<Array<{ name: string; path: string; directory: boolean }>>;
+      gitChanges: (id: string) => Promise<{ repo: boolean; changes: Array<{ path: string; code: string; kind: string }> }>;
+      readFile: (id: string, file: string) => Promise<{ binary: boolean; size: number; truncated: boolean; text: string }>;
+      writeFile: (id: string, file: string, text: string) => Promise<boolean>;
+      openExternal: (id: string, file: string) => Promise<string>;
       setModel: (id: string, provider: string, modelId: string) => Promise<unknown>;
       setThinking: (id: string, level: string) => Promise<unknown>;
       thinkingLevels: (id: string) => Promise<string[]>;
